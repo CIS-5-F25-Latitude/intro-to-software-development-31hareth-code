@@ -1,22 +1,41 @@
-// Minimal loop and input to get you moving quickly.
-// Replace this with your own tiny project or 2D game.
 
+// Minimal loop and input. Keep only the bike/player with jump mechanics (issue #2).
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// Example state: a ball and a paddle
+// Ground configuration
+const GROUND_HEIGHT = 20; // px
+
+// State: player (bike) and physics
 const state = {
-  ball: { x: 60, y: 60, r: 10, vx: 2, vy: 2 },
-  paddle: { x: 200, y: canvas.height - 20, w: 80, h: 10, speed: 4 },
-  score: 0,
+  player: {
+    x: 40,
+    y: 0, // set in restart()
+    w: 28,
+    h: 18,
+    vy: 0,
+    speed: 3,
+    onGround: false,
+  },
+  gravity: 0.8,
+  jumpImpulse: -12,
   running: true,
   keys: { left: false, right: false },
 };
 
-// Input
+// Input: track left/right and handle jump on keydown
 document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') state.keys.left = true;
   if (e.key === 'ArrowRight') state.keys.right = true;
+  if (e.code === 'Space') {
+    // prevent page scrolling on Space
+    e.preventDefault();
+    // only start a jump on keydown (AC: must be on ground)
+    if (state.player.onGround) {
+      state.player.vy = state.jumpImpulse;
+      state.player.onGround = false;
+    }
+  }
 });
 document.addEventListener('keyup', (e) => {
   if (e.key === 'ArrowLeft') state.keys.left = false;
@@ -26,72 +45,56 @@ document.addEventListener('keyup', (e) => {
 document.getElementById('btn-restart').addEventListener('click', () => restart());
 
 function restart() {
-  state.ball.x = 60; state.ball.y = 60; state.ball.vx = 2; state.ball.vy = 2;
-  state.paddle.x = (canvas.width - state.paddle.w) / 2;
-  state.score = 0;
+  // place player on ground
+  state.player.x = 40;
+  state.player.y = canvas.height - GROUND_HEIGHT - state.player.h;
+  state.player.vy = 0;
+  state.player.onGround = true;
   state.running = true;
-  drawHud();
 }
 
 function update() {
   if (!state.running) return;
 
-  // Paddle movement
-  if (state.keys.left) state.paddle.x -= state.paddle.speed;
-  if (state.keys.right) state.paddle.x += state.paddle.speed;
-  state.paddle.x = window.utils.clamp(state.paddle.x, 0, canvas.width - state.paddle.w);
+  // Player horizontal movement (left/right arrows)
+  if (state.keys.left) state.player.x -= state.player.speed;
+  if (state.keys.right) state.player.x += state.player.speed;
+  state.player.x = window.utils.clamp(state.player.x, 0, canvas.width - state.player.w);
 
-  // Ball movement
-  state.ball.x += state.ball.vx;
-  state.ball.y += state.ball.vy;
+  // Player vertical physics (gravity)
+  state.player.vy += state.gravity;
+  state.player.y += state.player.vy;
 
-  // Wall bounce
-  if (state.ball.x - state.ball.r < 0 || state.ball.x + state.ball.r > canvas.width) {
-    state.ball.vx = -state.ball.vx;
-  }
-  if (state.ball.y - state.ball.r < 0) {
-    state.ball.vy = -state.ball.vy;
-  }
-
-  // Paddle collision (simple AABB vs circle check)
-  if (state.ball.y + state.ball.r >= state.paddle.y &&
-      state.ball.x >= state.paddle.x &&
-      state.ball.x <= state.paddle.x + state.paddle.w &&
-      state.ball.vy > 0) {
-    state.ball.vy = -Math.abs(state.ball.vy);
-    state.score += 1;
-    drawHud();
-  }
-
-  // Missed ball → stop
-  if (state.ball.y - state.ball.r > canvas.height) {
-    state.running = false;
+  // Ground collision: prevent going through ground
+  const groundY = canvas.height - GROUND_HEIGHT;
+  if (state.player.y + state.player.h >= groundY) {
+    state.player.y = groundY - state.player.h;
+    state.player.vy = 0;
+    state.player.onGround = true;
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Ball
-  ctx.fillStyle = '#38bdf8';
+  // Draw ground
+  ctx.fillStyle = '#0b1220';
+  ctx.fillRect(0, canvas.height - GROUND_HEIGHT, canvas.width, GROUND_HEIGHT);
+  ctx.strokeStyle = '#334155';
+  ctx.strokeRect(0, canvas.height - GROUND_HEIGHT, canvas.width, GROUND_HEIGHT);
+
+  // Player (simple bike rectangle + small wheel circles)
+  ctx.fillStyle = '#f97316';
+  ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+  // wheels
+  ctx.fillStyle = '#111827';
+  const wheelRadius = 6;
   ctx.beginPath();
-  ctx.arc(state.ball.x, state.ball.y, state.ball.r, 0, Math.PI * 2);
+  ctx.arc(state.player.x + 6, state.player.y + state.player.h + wheelRadius - 2, wheelRadius, 0, Math.PI * 2);
   ctx.fill();
-
-  // Paddle
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(state.paddle.x, state.paddle.y, state.paddle.w, state.paddle.h);
-
-  if (!state.running) {
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '20px system-ui, sans-serif';
-    ctx.fillText('Game Over — Press Restart', 110, canvas.height / 2);
-  }
-}
-
-function drawHud() {
-  const scoreEl = document.getElementById('score');
-  scoreEl.textContent = `Score: ${state.score}`;
+  ctx.beginPath();
+  ctx.arc(state.player.x + state.player.w - 6, state.player.y + state.player.h + wheelRadius - 2, wheelRadius, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function loop() {
